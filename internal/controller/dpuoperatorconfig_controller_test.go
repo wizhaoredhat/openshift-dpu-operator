@@ -359,6 +359,13 @@ var _ = Describe("Main Controller", Ordered, func() {
 					return mgr.GetClient().Get(context.Background(), types.NamespacedName{Namespace: testNamespace, Name: testNetworkFunctionNAD}, nad)
 				}, testAPITimeout, testRetryInterval).ShouldNot(HaveOccurred())
 			})
+			It("TEST", func() {
+				nodeList := &corev1.NodeList{}
+				mgr.GetClient().List(context.Background(), nodeList, &client.ListOptions{})
+				for _, node := range nodeList.Items {
+					fmt.Printf("Node Name: %s\n", node.Name)
+				}
+			})
 			AfterAll(func() {
 				ns := dpuOperatorNameSpace()
 				cr = dpuOperatorCR("operator-config", "host", ns)
