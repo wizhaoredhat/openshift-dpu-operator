@@ -121,6 +121,13 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "ServiceFunctionChain")
 		os.Exit(1)
 	}
+	
+	// Setup NodeCordonReconciler
+	nodeCordonReconciler := controller.NewNodeCordonReconciler(mgr.GetClient(), mgr.GetScheme())
+	if err = nodeCordonReconciler.SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "NodeCordon")
+		os.Exit(1)
+	}
 	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
 		if err = (&configv1.DpuOperatorConfig{}).SetupWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "DpuOperatorConfig")
