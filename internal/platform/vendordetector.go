@@ -32,6 +32,7 @@ func NewPlatformInfo(p Platform) *PlatformInfo {
 		Detectors: []VendorDetector{
 			NewIntelDetector(),
 			NewMarvellDetector(),
+			NewNetsecAcceleratorDetector(),
 			// add more detectors here
 		},
 	}
