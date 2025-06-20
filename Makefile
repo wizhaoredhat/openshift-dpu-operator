@@ -187,7 +187,7 @@ GOARCH ?= amd64
 GOOS ?= linux
 
 .PHONY: build
-build: manifests generate fmt vet build-manager build-daemon build-intel-vsp build-marvell-vsp build-network-resources-injector
+build: manifests generate fmt vet build-manager build-daemon build-intel-vsp build-marvell-vsp build-intel-netsec-vsp build-network-resources-injector
 	@echo "Built all components"
 
 .PHONY: build-manager
@@ -205,6 +205,10 @@ build-intel-vsp:
 .PHONY: build-marvell-vsp
 build-marvell-vsp:
 	go run tools/task/task.go build-bin-marvell-vsp
+
+.PHONY: build-intel-netsec-vsp
+build-intel-netsec-vsp:
+	go run tools/task/task.go build-bin-intel-netsec-vsp
 
 .PHONY: build-network-resources-injector
 build-network-resources-injector:

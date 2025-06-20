@@ -26,12 +26,14 @@ var binData embed.FS
 
 const VspImageIntel string = "IntelVspImage"
 const VspImageMarvell string = "MarvellVspImage"
+const VspImageIntelNetSec string = "IntelNetSecVspImage"
 
 const VspImageP4Intel string = "IntelVspP4Image"
 
 var VspImages = []string{
 	VspImageIntel,
 	VspImageMarvell,
+	VspImageIntelNetSec,
 	// TODO: Add future supported vendor plugins here
 }
 
