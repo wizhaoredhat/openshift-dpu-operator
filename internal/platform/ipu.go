@@ -37,7 +37,7 @@ func (d *IntelDetector) isVirtualFunction(device string) (bool, error) {
 	}
 }
 
-func (d *IntelDetector) IsDPU(pci ghw.PCIDevice) (bool, error) {
+func (d *IntelDetector) IsDPU(pci ghw.PCIDevice, dpuDevices []ghw.PCIDevice) (bool, error) {
 	// VFs for the Intel IPU have the same PCIe info as the PF
 	isVF, err := d.isVirtualFunction(pci.Address)
 	if err != nil {

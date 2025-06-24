@@ -25,7 +25,7 @@ func NewMarvellDetector() *MarvellDetector {
 
 // IsDPU checks if the PCI device Attached to the host is a Marvell DPU
 // It returns true if device has Marvell DPU
-func (pi *MarvellDetector) IsDPU(pci ghw.PCIDevice) (bool, error) {
+func (pi *MarvellDetector) IsDPU(pci ghw.PCIDevice, dpuDevices []ghw.PCIDevice) (bool, error) {
 	if pci.Vendor.ID == MrvlVendorID &&
 		pci.Product.ID == MrvlHostDeviceID {
 		return true, nil

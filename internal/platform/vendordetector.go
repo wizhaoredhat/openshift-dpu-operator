@@ -17,7 +17,7 @@ type PlatformInfoProvider interface {
 type VendorDetector interface {
 	IsDpuPlatform(platform Platform) (bool, error)
 	VspPlugin(dpuMode bool, vspImages map[string]string, client client.Client) (*plugin.GrpcPlugin, error)
-	IsDPU(pci ghw.PCIDevice) (bool, error)
+	IsDPU(pci ghw.PCIDevice, dpuDevices []ghw.PCIDevice) (bool, error)
 	GetVendorName() string
 }
 
@@ -80,7 +80,7 @@ func (pi *PlatformInfo) Getvendorname() (string, error) {
 
 	for _, pci := range devices {
 		for _, detector := range pi.Detectors {
-			isDPU, err := detector.IsDPU(*pci)
+			isDPU, err := detector.IsDPU(*pci, []ghw.PCIDevice{})
 			if err != nil {
 				return "", err
 
@@ -103,7 +103,7 @@ func (pi *PlatformInfo) GetPcieDevFilter() (string, string, string, error) {
 	}
 	for _, pci := range devices {
 		for _, detector := range pi.Detectors {
-			isDPU, err := detector.IsDPU(*pci)
+			isDPU, err := detector.IsDPU(*pci, []ghw.PCIDevice{})
 			if err != nil {
 				return "", "", "", err
 
@@ -162,7 +162,7 @@ func (pi *PlatformInfo) listDpuDevices() ([]ghw.PCIDevice, []VendorDetector, err
 	var activeDetectors []VendorDetector
 	for _, pci := range devices {
 		for _, detector := range pi.Detectors {
-			isDPU, err := detector.IsDPU(*pci)
+			isDPU, err := detector.IsDPU(*pci, dpuDevices)
 			if err != nil {
 				return nil, nil, err
 			}

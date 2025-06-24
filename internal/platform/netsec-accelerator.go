@@ -24,9 +24,16 @@ func NewNetsecAcceleratorDetector() *NetsecAcceleratorDetector {
 
 // IsDPU checks if the PCI device Attached to the host is a Marvell DPU
 // It returns true if device has Marvell DPU
-func (pi *NetsecAcceleratorDetector) IsDPU(pci ghw.PCIDevice) (bool, error) {
+func (pi *NetsecAcceleratorDetector) IsDPU(pci ghw.PCIDevice, dpuDevices []ghw.PCIDevice) (bool, error) {
 	if pci.Vendor.ID == IntelVendorID &&
 		pci.Product.ID == IntelNetSecHostDeviceID {
+		bus := ghw.PCIAddressFromString(pci.Address).Bus
+		for _, dpuDevice := range dpuDevices {
+			if ghw.PCIAddressFromString(dpuDevice.Address).Bus == bus {
+				// This is a dual port device ignore the second port.
+				return false, nil
+			}
+		}
 		return true, nil
 	}
 

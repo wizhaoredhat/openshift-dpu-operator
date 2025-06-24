@@ -179,6 +179,12 @@ func (vsp *intelNetSecVspServer) DeleteNetworkFunction(ctx context.Context, in *
 	return nil, nil
 }
 
+// SetNumVfs function to set the number of VFs with the given context and VfCount
+func (vsp *intelNetSecVspServer) SetNumVfs(ctx context.Context, in *pb.VfCount) (*pb.VfCount, error) {
+	klog.Infof("Received SetNumVfs() request: VfCnt: %v", in.VfCnt)
+	return in, nil
+}
+
 func (vsp *intelNetSecVspServer) Listen() (net.Listener, error) {
 	err := vsp.pathManager.EnsureSocketDirExists(vsp.pathManager.VendorPluginSocket())
 	if err != nil {
