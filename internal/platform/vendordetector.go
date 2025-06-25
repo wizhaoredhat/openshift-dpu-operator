@@ -16,7 +16,7 @@ type PlatformInfoProvider interface {
 
 type VendorDetector interface {
 	IsDpuPlatform(platform Platform) (bool, error)
-	VspPlugin(dpuMode bool, vspImages map[string]string, client client.Client) (*plugin.GrpcPlugin, error)
+	VspPlugin(dpuMode bool, vspImages map[string]string, client client.Client, dpuPciDevice *ghw.PCIDevice) (*plugin.GrpcPlugin, error)
 	IsDPU(pci ghw.PCIDevice, dpuDevices []ghw.PCIDevice) (bool, error)
 	GetVendorName() string
 }
@@ -42,15 +42,16 @@ func (pi *PlatformInfo) NewVspPlugin(dpuMode bool, vspImages map[string]string, 
 	var detector VendorDetector
 	var err error
 
+	var dpuPciDevice *ghw.PCIDevice
 	if dpuMode {
 		detector, err = pi.detectDpuPlatform(true)
 	} else {
-		detector, err = pi.detectDpuSystem(true)
+		detector, dpuPciDevice, err = pi.detectDpuSystem(true)
 	}
 	if err != nil {
 		return nil, err
 	}
-	vspPlugin, err := detector.VspPlugin(dpuMode, vspImages, client)
+	vspPlugin, err := detector.VspPlugin(dpuMode, vspImages, client, dpuPciDevice)
 	if err != nil {
 		return nil, errors.Errorf("Error encountered when deploying VspPlugin: %v", err)
 	}
@@ -176,19 +177,19 @@ func (pi *PlatformInfo) listDpuDevices() ([]ghw.PCIDevice, []VendorDetector, err
 	return dpuDevices, activeDetectors, nil
 }
 
-func (pi *PlatformInfo) detectDpuSystem(required bool) (VendorDetector, error) {
+func (pi *PlatformInfo) detectDpuSystem(required bool) (VendorDetector, *ghw.PCIDevice, error) {
 	dpuDevices, detectors, err := pi.listDpuDevices()
 	if err != nil {
-		return nil, errors.Errorf("Failed to get VspPlugin from platform: %v", err)
+		return nil, nil, errors.Errorf("Failed to get VspPlugin from platform: %v", err)
 	}
 	if len(dpuDevices) != 1 {
 		if len(dpuDevices) != 0 {
-			return nil, fmt.Errorf("%v DPU devices detected. Currently only supporting exactly 1 DPU per node", len(dpuDevices))
+			return nil, nil, fmt.Errorf("%v DPU devices detected. Currently only supporting exactly 1 DPU per node", len(dpuDevices))
 		}
 		if required {
-			return nil, fmt.Errorf("Failed to detect any DPU devices")
+			return nil, nil, fmt.Errorf("Failed to detect any DPU devices")
 		}
-		return nil, nil
+		return nil, nil, nil
 	}
-	return detectors[0], nil
+	return detectors[0], &dpuDevices[0], nil
 }

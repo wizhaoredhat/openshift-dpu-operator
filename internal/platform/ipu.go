@@ -62,7 +62,7 @@ func (pi *IntelDetector) IsDpuPlatform(platform Platform) (bool, error) {
 	return false, nil
 }
 
-func (pi *IntelDetector) VspPlugin(dpuMode bool, vspImages map[string]string, client client.Client) (*plugin.GrpcPlugin, error) {
+func (pi *IntelDetector) VspPlugin(dpuMode bool, vspImages map[string]string, client client.Client, dpuPciDevice *ghw.PCIDevice) (*plugin.GrpcPlugin, error) {
 	p4Image := os.Getenv(VspP4ImageIntelEnv)
 	if p4Image == "" {
 		return nil, errors.Errorf("Error getting vsp-p4 image: Can't start Intel vsp without vsp-p4")
@@ -73,6 +73,9 @@ func (pi *IntelDetector) VspPlugin(dpuMode bool, vspImages map[string]string, cl
 	template_vars.VendorSpecificPluginImage = vspImages[plugin.VspImageIntel]
 	template_vars.Command = `[ "/ipuplugin" ]`
 	template_vars.Args = args
+	if dpuPciDevice != nil {
+		template_vars.DpuPciAddress = dpuPciDevice.Address
+	}
 	return plugin.NewGrpcPlugin(dpuMode, client, plugin.WithVsp(template_vars))
 }
 

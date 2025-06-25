@@ -7,10 +7,13 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/go-logr/logr"
+	"github.com/jaypipes/ghw"
 	pb "github.com/openshift/dpu-operator/dpu-api/gen"
 	"github.com/openshift/dpu-operator/internal/utils"
 	opi "github.com/opiproject/opi-api/network/evpn-gw/v1alpha1/gen/go"
@@ -23,10 +26,12 @@ import (
 )
 
 const (
-	Version      string = "0.0.1"
-	IPv6AddrDpu  string = "fe80::1"
-	IPv6AddrHost string = "fe80::2"
-	DefaultPort  int32  = 8085
+	Version                   string = "0.0.1"
+	IPv6AddrDpu               string = "fe80::1"
+	IPv6AddrHost              string = "fe80::2"
+	DefaultPort               int32  = 8085
+	IntelVendorID             string = "8086"
+	IntelNetSecHostVfDeviceID string = "1889" // Intel Corporation Ethernet Adaptive Virtual Function
 )
 
 type intelNetSecVspServer struct {
@@ -42,6 +47,54 @@ type intelNetSecVspServer struct {
 	pathManager utils.PathManager
 	version     string
 	isDPUMode   bool
+}
+
+func SetSriovNumVfs(pciAddr string, numVfs int) error {
+	klog.Infof("SetSriovNumVfs(): set NumVfs device %s numvfs %d", pciAddr, numVfs)
+	numVfsFilePath := filepath.Join("/sys/bus/pci/devices", pciAddr, "sriov_numvfs")
+	bs := []byte(strconv.Itoa(numVfs))
+	err := os.WriteFile(numVfsFilePath, []byte("0"), os.ModeAppend)
+	if err != nil {
+		klog.Errorf("SetSriovNumVfs(): fail to reset NumVfs file path %s, err %v", numVfsFilePath, err)
+		return err
+	}
+	if numVfs == 0 {
+		return nil
+	}
+	err = os.WriteFile(numVfsFilePath, bs, os.ModeAppend)
+	if err != nil {
+		klog.Errorf("SetSriovNumVfs(): fail to set NumVfs file path %s, err %v", numVfsFilePath, err)
+		return err
+	}
+	return nil
+}
+
+func GetVFs() ([]string, error) {
+	dpuPciAddress := os.Getenv("DPU_PCI_ADDRESS")
+
+	if dpuPciAddress == "" {
+		return nil, fmt.Errorf("DPU_PCI_ADDRESS environment variable is not set")
+	}
+
+	var pciVFAddresses []string
+
+	pciInfo, err := ghw.PCI()
+	if err != nil {
+		return nil, err
+	}
+
+	bus := ghw.PCIAddressFromString(dpuPciAddress).Bus
+	for _, pci := range pciInfo.Devices {
+		if ghw.PCIAddressFromString(pci.Address).Bus == bus {
+			if pci.Vendor.ID == IntelVendorID &&
+				pci.Product.ID == IntelNetSecHostVfDeviceID {
+				pciVFAddresses = append(pciVFAddresses, pci.Address)
+			}
+		}
+	}
+
+	klog.Infof("GetVFs(): found %d VFs for DPU PCI Address %s: %v", len(pciVFAddresses), dpuPciAddress, pciVFAddresses)
+	return pciVFAddresses, nil
 }
 
 func linkHasAddrgenmodeEui64(interfaceName string) bool {
@@ -142,12 +195,20 @@ func (vsp *intelNetSecVspServer) Init(ctx context.Context, in *pb.InitRequest) (
 // TODO: Implement this
 func (vsp *intelNetSecVspServer) GetDevices(ctx context.Context, in *pb.Empty) (*pb.DeviceListResponse, error) {
 	klog.Info("Received GetDevices() request")
+	devices := make(map[string]*pb.Device)
 
-	devices := map[string]*pb.Device{
-		"enp244s0f0": {ID: "enp244s0f0", Health: "Healthy"},
-		"enp244s0f1": {ID: "enp244s0f1", Health: "Healthy"},
-		"enp244s0f2": {ID: "enp244s0f2", Health: "Healthy"},
-		"enp244s0f3": {ID: "enp244s0f3", Health: "Healthy"},
+	vfs, err := GetVFs()
+	if err != nil {
+		klog.Errorf("Error getting VFs: %v", err)
+		return nil, err
+	}
+
+	for _, vf := range vfs {
+		klog.Infof("Adding device %s to the response", vf)
+		devices[vf] = &pb.Device{
+			ID:     vf,
+			Health: "Healthy",
+		}
 	}
 
 	return &pb.DeviceListResponse{
@@ -182,7 +243,15 @@ func (vsp *intelNetSecVspServer) DeleteNetworkFunction(ctx context.Context, in *
 // SetNumVfs function to set the number of VFs with the given context and VfCount
 func (vsp *intelNetSecVspServer) SetNumVfs(ctx context.Context, in *pb.VfCount) (*pb.VfCount, error) {
 	klog.Infof("Received SetNumVfs() request: VfCnt: %v", in.VfCnt)
-	return in, nil
+	dpuPciAddress := os.Getenv("DPU_PCI_ADDRESS")
+
+	if dpuPciAddress == "" {
+		return nil, fmt.Errorf("DPU_PCI_ADDRESS environment variable is not set")
+	}
+
+	err := SetSriovNumVfs(dpuPciAddress, int(in.VfCnt))
+
+	return in, err
 }
 
 func (vsp *intelNetSecVspServer) Listen() (net.Listener, error) {

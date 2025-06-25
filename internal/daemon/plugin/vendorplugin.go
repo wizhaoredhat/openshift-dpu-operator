@@ -95,6 +95,7 @@ func NewVspTemplateVars() VspTemplateVars {
 	return VspTemplateVars{
 		VendorSpecificPluginImage: "",
 		Namespace:                 vars.Namespace,
+		DpuPciAddress:             "",
 		ImagePullPolicy:           "Always",
 		Command:                   "[ ]",
 		Args:                      "[ ]",
@@ -104,6 +105,7 @@ func NewVspTemplateVars() VspTemplateVars {
 type VspTemplateVars struct {
 	VendorSpecificPluginImage string
 	Namespace                 string
+	DpuPciAddress             string
 	ImagePullPolicy           string
 	Command                   string
 	Args                      string
@@ -113,6 +115,7 @@ func (v VspTemplateVars) ToMap() map[string]string {
 	return map[string]string{
 		"VendorSpecificPluginImage": v.VendorSpecificPluginImage,
 		"Namespace":                 v.Namespace,
+		"DpuPciAddress":             v.DpuPciAddress,
 		"ImagePullPolicy":           v.ImagePullPolicy,
 		"Command":                   v.Command,
 		"Args":                      v.Args,
@@ -146,7 +149,7 @@ func WithPathManager(pathManager utils.PathManager) func(*GrpcPlugin) {
 func WithVsp(template_vars VspTemplateVars) func(*GrpcPlugin) {
 	return func(d *GrpcPlugin) {
 		d.vsp = template_vars
-		d.log.Info("Deploying with VSP", "vsp", d.vsp.VendorSpecificPluginImage)
+		d.log.Info("Deploying with VSP", "vsp", d.vsp.VendorSpecificPluginImage, "DpuPciAddress", d.vsp.DpuPciAddress)
 	}
 }
 
