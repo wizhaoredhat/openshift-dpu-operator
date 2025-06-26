@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"os"
 
 	"github.com/openshift/dpu-operator/internal/platform"
 	"github.com/openshift/dpu-operator/internal/scheme"
@@ -135,6 +136,15 @@ func (d *Daemon) prepareCni() error {
 }
 
 func (d *Daemon) isDpuMode() (bool, error) {
+	nodename := os.Getenv("K8S_NODE")
+	d.log.Info("Checking DPU mode", "nodeName", nodename, "mode", d.mode)
+
+	if nodename == "worker-229" {
+		return false, nil
+	} else if nodename == "worker-229-ptl" {
+		return true, nil
+	}
+
 	if d.mode == "host" {
 		return false, nil
 	} else if d.mode == "dpu" {
