@@ -8,6 +8,7 @@ import (
 	"os"
 
 	"github.com/go-logr/logr"
+	"github.com/jaypipes/ghw"
 	configv1 "github.com/openshift/dpu-operator/api/v1"
 	pb "github.com/openshift/dpu-operator/dpu-api/gen"
 	"github.com/openshift/dpu-operator/internal/scheme"
@@ -79,23 +80,23 @@ type VendorPlugin interface {
 }
 
 type GrpcPlugin struct {
-	log         logr.Logger
-	client      pb.LifeCycleServiceClient
-	k8sClient   client.Client
-	opiClient   opi.BridgePortServiceClient
-	nfclient    pb.NetworkFunctionServiceClient
-	dsClient    pb.DeviceServiceClient
-	dpuMode     bool
-	vsp         VspTemplateVars
-	conn        *grpc.ClientConn
-	pathManager utils.PathManager
+	log            logr.Logger
+	client         pb.LifeCycleServiceClient
+	k8sClient      client.Client
+	opiClient      opi.BridgePortServiceClient
+	nfclient       pb.NetworkFunctionServiceClient
+	dsClient       pb.DeviceServiceClient
+	dpuMode        bool
+	DpuPcieAddress string
+	vsp            VspTemplateVars
+	conn           *grpc.ClientConn
+	pathManager    utils.PathManager
 }
 
 func NewVspTemplateVars() VspTemplateVars {
 	return VspTemplateVars{
 		VendorSpecificPluginImage: "",
 		Namespace:                 vars.Namespace,
-		DpuPciAddress:             "",
 		ImagePullPolicy:           "Always",
 		Command:                   "[ ]",
 		Args:                      "[ ]",
@@ -105,7 +106,6 @@ func NewVspTemplateVars() VspTemplateVars {
 type VspTemplateVars struct {
 	VendorSpecificPluginImage string
 	Namespace                 string
-	DpuPciAddress             string
 	ImagePullPolicy           string
 	Command                   string
 	Args                      string
@@ -115,7 +115,6 @@ func (v VspTemplateVars) ToMap() map[string]string {
 	return map[string]string{
 		"VendorSpecificPluginImage": v.VendorSpecificPluginImage,
 		"Namespace":                 v.Namespace,
-		"DpuPciAddress":             v.DpuPciAddress,
 		"ImagePullPolicy":           v.ImagePullPolicy,
 		"Command":                   v.Command,
 		"Args":                      v.Args,
@@ -127,7 +126,7 @@ func (g *GrpcPlugin) Start() (string, int32, error) {
 	if err != nil {
 		return "", 0, fmt.Errorf("Failed to ensure GRPC connection on grpcPlugin start: %v", err)
 	}
-	ipPort, err := g.client.Init(context.TODO(), &pb.InitRequest{DpuMode: g.dpuMode})
+	ipPort, err := g.client.Init(context.TODO(), &pb.InitRequest{DpuMode: g.dpuMode, DpuPcieAddress: g.DpuPcieAddress})
 
 	if err != nil {
 		return "", 0, fmt.Errorf("Failed to start serving on grpcPlugin start: %v", err)
@@ -149,7 +148,7 @@ func WithPathManager(pathManager utils.PathManager) func(*GrpcPlugin) {
 func WithVsp(template_vars VspTemplateVars) func(*GrpcPlugin) {
 	return func(d *GrpcPlugin) {
 		d.vsp = template_vars
-		d.log.Info("Deploying with VSP", "vsp", d.vsp.VendorSpecificPluginImage, "DpuPciAddress", d.vsp.DpuPciAddress)
+		d.log.Info("Deploying with VSP", "vsp", d.vsp.VendorSpecificPluginImage)
 	}
 }
 
@@ -178,13 +177,20 @@ func (gp *GrpcPlugin) deployVsp() error {
 	return nil
 }
 
-func NewGrpcPlugin(dpuMode bool, client client.Client, opts ...func(*GrpcPlugin)) (*GrpcPlugin, error) {
+func NewGrpcPlugin(dpuMode bool, dpuPciDevice *ghw.PCIDevice, client client.Client, opts ...func(*GrpcPlugin)) (*GrpcPlugin, error) {
+	var dpuPcieAddress string
+
+	if dpuPciDevice != nil {
+		dpuPcieAddress = dpuPciDevice.Address
+	}
+
 	gp := &GrpcPlugin{
-		dpuMode:     dpuMode,
-		vsp:         VspTemplateVars{},
-		k8sClient:   client,
-		log:         ctrl.Log.WithName("GrpcPlugin"),
-		pathManager: *utils.NewPathManager("/"),
+		dpuMode:        dpuMode,
+		DpuPcieAddress: dpuPcieAddress,
+		vsp:            VspTemplateVars{},
+		k8sClient:      client,
+		log:            ctrl.Log.WithName("GrpcPlugin"),
+		pathManager:    *utils.NewPathManager("/"),
 	}
 
 	for _, opt := range opts {

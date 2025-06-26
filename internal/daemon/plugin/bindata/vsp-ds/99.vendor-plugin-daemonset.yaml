@@ -23,8 +23,6 @@ spec:
         image: {{.VendorSpecificPluginImage}}
         imagePullPolicy: {{.ImagePullPolicy}}
         env:
-        - name: DPU_PCI_ADDRESS
-          value: {{.DpuPciAddress}}
         securityContext:
           privileged: true
           runAsUser: 0

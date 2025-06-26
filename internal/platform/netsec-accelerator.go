@@ -61,10 +61,7 @@ func (pi *NetsecAcceleratorDetector) VspPlugin(dpuMode bool, vspImages map[strin
 	template_vars := plugin.NewVspTemplateVars()
 	template_vars.VendorSpecificPluginImage = vspImages[plugin.VspImageIntelNetSec]
 	template_vars.Command = `[ "/vsp-intel-netsec" ]`
-	if dpuPciDevice != nil {
-		template_vars.DpuPciAddress = dpuPciDevice.Address
-	}
-	return plugin.NewGrpcPlugin(dpuMode, client, plugin.WithVsp(template_vars))
+	return plugin.NewGrpcPlugin(dpuMode, dpuPciDevice, client, plugin.WithVsp(template_vars))
 }
 
 // GetVendorName returns the name of the vendor

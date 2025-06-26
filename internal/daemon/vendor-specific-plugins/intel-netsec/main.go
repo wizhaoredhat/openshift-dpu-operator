@@ -39,14 +39,15 @@ type intelNetSecVspServer struct {
 	pb.UnimplementedNetworkFunctionServiceServer
 	pb.UnimplementedDeviceServiceServer
 	opi.UnimplementedBridgePortServiceServer
-	log         logr.Logger
-	grpcServer  *grpc.Server
-	wg          sync.WaitGroup
-	done        chan error
-	startedWg   sync.WaitGroup
-	pathManager utils.PathManager
-	version     string
-	isDPUMode   bool
+	log            logr.Logger
+	grpcServer     *grpc.Server
+	wg             sync.WaitGroup
+	done           chan error
+	startedWg      sync.WaitGroup
+	pathManager    utils.PathManager
+	version        string
+	isDPUMode      bool
+	dpuPcieAddress string
 }
 
 func SetSriovNumVfs(pciAddr string, numVfs int) error {
@@ -69,13 +70,7 @@ func SetSriovNumVfs(pciAddr string, numVfs int) error {
 	return nil
 }
 
-func GetVFs() ([]string, error) {
-	dpuPciAddress := os.Getenv("DPU_PCI_ADDRESS")
-
-	if dpuPciAddress == "" {
-		return nil, fmt.Errorf("DPU_PCI_ADDRESS environment variable is not set")
-	}
-
+func (vsp *intelNetSecVspServer) GetVFs() ([]string, error) {
 	var pciVFAddresses []string
 
 	pciInfo, err := ghw.PCI()
@@ -83,7 +78,7 @@ func GetVFs() ([]string, error) {
 		return nil, err
 	}
 
-	bus := ghw.PCIAddressFromString(dpuPciAddress).Bus
+	bus := ghw.PCIAddressFromString(vsp.dpuPcieAddress).Bus
 	for _, pci := range pciInfo.Devices {
 		if ghw.PCIAddressFromString(pci.Address).Bus == bus {
 			if pci.Vendor.ID == IntelVendorID &&
@@ -93,7 +88,7 @@ func GetVFs() ([]string, error) {
 		}
 	}
 
-	klog.Infof("GetVFs(): found %d VFs for DPU PCI Address %s: %v", len(pciVFAddresses), dpuPciAddress, pciVFAddresses)
+	klog.Infof("GetVFs(): found %d VFs for DPU PCI Address %s: %v", len(pciVFAddresses), vsp.dpuPcieAddress, pciVFAddresses)
 	return pciVFAddresses, nil
 }
 
@@ -182,8 +177,9 @@ func (vsp *intelNetSecVspServer) configureIP(dpuMode bool) (pb.IpPort, error) {
 }
 
 func (vsp *intelNetSecVspServer) Init(ctx context.Context, in *pb.InitRequest) (*pb.IpPort, error) {
-	klog.Infof("Received Init() request: DpuMode: %v", in.DpuMode)
+	klog.Infof("Received Init() request: DpuMode: %v DpuPcieAddress: %v", in.DpuMode, in.DpuPcieAddress)
 	vsp.isDPUMode = in.DpuMode
+	vsp.dpuPcieAddress = in.DpuPcieAddress
 	ipPort, err := vsp.configureIP(in.DpuMode)
 
 	return &pb.IpPort{
@@ -197,7 +193,7 @@ func (vsp *intelNetSecVspServer) GetDevices(ctx context.Context, in *pb.Empty) (
 	klog.Info("Received GetDevices() request")
 	devices := make(map[string]*pb.Device)
 
-	vfs, err := GetVFs()
+	vfs, err := vsp.GetVFs()
 	if err != nil {
 		klog.Errorf("Error getting VFs: %v", err)
 		return nil, err
@@ -243,13 +239,8 @@ func (vsp *intelNetSecVspServer) DeleteNetworkFunction(ctx context.Context, in *
 // SetNumVfs function to set the number of VFs with the given context and VfCount
 func (vsp *intelNetSecVspServer) SetNumVfs(ctx context.Context, in *pb.VfCount) (*pb.VfCount, error) {
 	klog.Infof("Received SetNumVfs() request: VfCnt: %v", in.VfCnt)
-	dpuPciAddress := os.Getenv("DPU_PCI_ADDRESS")
 
-	if dpuPciAddress == "" {
-		return nil, fmt.Errorf("DPU_PCI_ADDRESS environment variable is not set")
-	}
-
-	err := SetSriovNumVfs(dpuPciAddress, int(in.VfCnt))
+	err := SetSriovNumVfs(vsp.dpuPcieAddress, int(in.VfCnt))
 
 	return in, err
 }

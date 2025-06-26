@@ -55,10 +55,7 @@ func (pi *MarvellDetector) VspPlugin(dpuMode bool, vspImages map[string]string, 
 	template_vars := plugin.NewVspTemplateVars()
 	template_vars.VendorSpecificPluginImage = vspImages[plugin.VspImageMarvell]
 	template_vars.Command = `[ "/vsp-mrvl" ]`
-	if dpuPciDevice != nil {
-		template_vars.DpuPciAddress = dpuPciDevice.Address
-	}
-	return plugin.NewGrpcPlugin(dpuMode, client, plugin.WithVsp(template_vars))
+	return plugin.NewGrpcPlugin(dpuMode, dpuPciDevice, client, plugin.WithVsp(template_vars))
 }
 
 // GetVendorName returns the name of the vendor

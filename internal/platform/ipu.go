@@ -73,10 +73,7 @@ func (pi *IntelDetector) VspPlugin(dpuMode bool, vspImages map[string]string, cl
 	template_vars.VendorSpecificPluginImage = vspImages[plugin.VspImageIntel]
 	template_vars.Command = `[ "/ipuplugin" ]`
 	template_vars.Args = args
-	if dpuPciDevice != nil {
-		template_vars.DpuPciAddress = dpuPciDevice.Address
-	}
-	return plugin.NewGrpcPlugin(dpuMode, client, plugin.WithVsp(template_vars))
+	return plugin.NewGrpcPlugin(dpuMode, dpuPciDevice, client, plugin.WithVsp(template_vars))
 }
 
 func (d *IntelDetector) GetVendorName() string {
