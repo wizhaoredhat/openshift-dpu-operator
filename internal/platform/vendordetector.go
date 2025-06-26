@@ -191,5 +191,7 @@ func (pi *PlatformInfo) detectDpuSystem(required bool) (VendorDetector, *ghw.PCI
 		}
 		return nil, nil, nil
 	}
+	klog.Infof("Detected DPU device: %s", dpuDevices[0].Address)
+
 	return detectors[0], &dpuDevices[0], nil
 }
