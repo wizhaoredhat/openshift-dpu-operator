@@ -26,12 +26,16 @@ import (
 )
 
 const (
-	Version                   string = "0.0.1"
-	IPv6AddrDpu               string = "fe80::1"
-	IPv6AddrHost              string = "fe80::2"
-	DefaultPort               int32  = 8085
-	IntelVendorID             string = "8086"
-	IntelNetSecHostVfDeviceID string = "1889" // Intel Corporation Ethernet Adaptive Virtual Function
+	Version                              string = "0.0.1"
+	IPv6AddrDpu                          string = "fe80::1"
+	IPv6AddrHost                         string = "fe80::2"
+	DefaultPort                          int32  = 8085
+	IntelVendorID                        string = "8086"
+	IntelNetSecHostVfDeviceID            string = "1889" // Intel Corporation Ethernet Adaptive Virtual Function
+	IntelNetSecDpuSFPf0PCIeAddress       string = "0000:f4:00.0"
+	IntelNetSecDpuSFPf1PCIeAddress       string = "0000:f4:00.1"
+	IntelNetSecDpuBackplanef2PCIeAddress string = "0000:f4:00.2"
+	IntelNetSecDpuBackplanef3PCIeAddress string = "0000:f4:00.3"
 )
 
 type intelNetSecVspServer struct {
@@ -70,7 +74,7 @@ func SetSriovNumVfs(pciAddr string, numVfs int) error {
 	return nil
 }
 
-func (vsp *intelNetSecVspServer) GetVFs() ([]string, error) {
+func (vsp *intelNetSecVspServer) GetVFs(pfPCIeAddress string) ([]string, error) {
 	var pciVFAddresses []string
 
 	pciInfo, err := ghw.PCI()
@@ -78,7 +82,7 @@ func (vsp *intelNetSecVspServer) GetVFs() ([]string, error) {
 		return nil, err
 	}
 
-	bus := ghw.PCIAddressFromString(vsp.dpuPcieAddress).Bus
+	bus := ghw.PCIAddressFromString(pfPCIeAddress).Bus
 	for _, pci := range pciInfo.Devices {
 		if ghw.PCIAddressFromString(pci.Address).Bus == bus {
 			if pci.Vendor.ID == IntelVendorID &&
@@ -88,8 +92,27 @@ func (vsp *intelNetSecVspServer) GetVFs() ([]string, error) {
 		}
 	}
 
-	klog.Infof("GetVFs(): found %d VFs for DPU PCI Address %s: %v", len(pciVFAddresses), vsp.dpuPcieAddress, pciVFAddresses)
+	numVfs := len(pciVFAddresses)
+	vsp.log.Info("GetVFs(): found VFs", "NumVFs", numVfs, "DpuPcieAddress", vsp.dpuPcieAddress)
 	return pciVFAddresses, nil
+}
+
+func (vsp *intelNetSecVspServer) GetNetDevNameFromPCIeAddr(pcieAddress string) string {
+	netInfo, err := ghw.Network()
+	if err != nil {
+		vsp.log.Error(err, "GetNetDevNameFromPCIeAddr(): failed to get network info")
+		return ""
+	}
+
+	for _, nic := range netInfo.NICs {
+		if nic.PCIAddress != nil && *nic.PCIAddress == pcieAddress {
+			vsp.log.Info("GetNetDevNameFromPCIeAddr(): found DPU network device", "Name", nic.Name, "PCIAddress", *nic.PCIAddress)
+			return nic.Name
+		}
+	}
+
+	vsp.log.Error(nil, "GetNetDevNameFromPCIeAddr(): Network device not found", "PCIAddress", pcieAddress)
+	return ""
 }
 
 func linkHasAddrgenmodeEui64(interfaceName string) bool {
@@ -145,14 +168,15 @@ func (vsp *intelNetSecVspServer) configureIP(dpuMode bool) (pb.IpPort, error) {
 	var ifName string
 	var addr string
 	if dpuMode {
-		ifName = "enp244s0f2"
+		// All NetSec DPU devices have the same internal PCIe Addresses. Netdev names can change with each RHEL release.
+		ifName = vsp.GetNetDevNameFromPCIeAddr(IntelNetSecDpuBackplanef2PCIeAddress)
 		addr = IPv6AddrDpu
 	} else {
-		ifName = "ens7f0"
+		ifName = vsp.GetNetDevNameFromPCIeAddr(vsp.dpuPcieAddress)
 		addr = IPv6AddrHost
 	}
 
-	klog.Infof("Interface Name: %s", ifName)
+	vsp.log.Info("configureIP(): DpuMode", "DpuMode", dpuMode, "IfName", ifName, "Addr", addr)
 
 	err := enableIPV6LinkLocal(ifName, addr)
 	addr = IPv6AddrDpu
@@ -173,7 +197,6 @@ func (vsp *intelNetSecVspServer) configureIP(dpuMode bool) (pb.IpPort, error) {
 		Ip:   connStr,
 		Port: DefaultPort,
 	}, nil
-
 }
 
 func (vsp *intelNetSecVspServer) Init(ctx context.Context, in *pb.InitRequest) (*pb.IpPort, error) {
@@ -193,7 +216,7 @@ func (vsp *intelNetSecVspServer) GetDevices(ctx context.Context, in *pb.Empty) (
 	klog.Info("Received GetDevices() request")
 	devices := make(map[string]*pb.Device)
 
-	vfs, err := vsp.GetVFs()
+	vfs, err := vsp.GetVFs(vsp.dpuPcieAddress)
 	if err != nil {
 		klog.Errorf("Error getting VFs: %v", err)
 		return nil, err
@@ -239,8 +262,13 @@ func (vsp *intelNetSecVspServer) DeleteNetworkFunction(ctx context.Context, in *
 // SetNumVfs function to set the number of VFs with the given context and VfCount
 func (vsp *intelNetSecVspServer) SetNumVfs(ctx context.Context, in *pb.VfCount) (*pb.VfCount, error) {
 	klog.Infof("Received SetNumVfs() request: VfCnt: %v", in.VfCnt)
+	var err error
 
-	err := SetSriovNumVfs(vsp.dpuPcieAddress, int(in.VfCnt))
+	if vsp.isDPUMode {
+		err = SetSriovNumVfs(IntelNetSecDpuBackplanef2PCIeAddress, int(in.VfCnt))
+	} else {
+		err = SetSriovNumVfs(vsp.dpuPcieAddress, int(in.VfCnt))
+	}
 
 	return in, err
 }
