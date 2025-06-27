@@ -36,6 +36,8 @@ type DpuSideManager struct {
 
 	vsp         plugin.VendorPlugin
 	dp          deviceplugin.DevicePlugin
+	addr        string
+	port        int32
 	log         logr.Logger
 	server      *grpc.Server
 	cniserver   *cniserver.Server
@@ -69,6 +71,14 @@ func NewDpuSideManger(vsp plugin.VendorPlugin, config *rest.Config, opts ...func
 	for _, opt := range opts {
 		opt(d)
 	}
+
+	addr, port, err := d.vsp.Start()
+	if err != nil {
+		d.log.Error(err, "VSP Start() returned error")
+		return nil
+	}
+	d.addr = addr
+	d.port = port
 
 	d.dp = deviceplugin.NewDevicePlugin(vsp, true, d.pathManager)
 
@@ -123,17 +133,12 @@ func (d *DpuSideManager) Listen() (net.Listener, error) {
 	d.log.Info("Starting DpuDaemon")
 	d.setupReconcilers()
 
-	addr, port, err := d.vsp.Start()
-	if err != nil {
-		return nil, fmt.Errorf("Failed to get addr:port from VendorPlugin: %v", err)
-	}
-
 	d.server = grpc.NewServer()
 	pb.RegisterBridgePortServiceServer(d.server, d)
 
-	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%d", addr, port))
+	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%d", d.addr, d.port))
 	if err != nil {
-		return lis, fmt.Errorf("Failed to start listening on %v:%v: %v", addr, port, err)
+		return lis, fmt.Errorf("Failed to start listening on %v:%v: %v", d.addr, d.port, err)
 	}
 	d.log.Info("server listening", "address", lis.Addr())
 

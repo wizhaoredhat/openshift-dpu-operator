@@ -127,6 +127,7 @@ func (g *GrpcPlugin) Start() (string, int32, error) {
 		return "", 0, fmt.Errorf("Failed to ensure GRPC connection on grpcPlugin start: %v", err)
 	}
 	ipPort, err := g.client.Init(context.TODO(), &pb.InitRequest{DpuMode: g.dpuMode, DpuPcieAddress: g.DpuPcieAddress})
+	g.log.Info("GrpcPlugin Start()", "ip", ipPort.Ip, "port", ipPort.Port, "dpuMode", g.dpuMode, "DpuPcieAddress", g.DpuPcieAddress)
 
 	if err != nil {
 		return "", 0, fmt.Errorf("Failed to start serving on grpcPlugin start: %v", err)
