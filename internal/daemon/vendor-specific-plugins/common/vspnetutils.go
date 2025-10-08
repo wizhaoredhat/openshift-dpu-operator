@@ -21,7 +21,6 @@ const (
 	pcidevPrefix         = "device"
 	netDevVfDevicePrefix = "virtfn"
 	retryInterval        = 500 * time.Millisecond
-	retryCount           = 5
 )
 
 type VethPairKey struct {
@@ -274,50 +273,91 @@ func DeleteInterfaceFromOvSBridge(bridgeName string, ifname string) error {
 	return cmd.Run()
 }
 
-// WaitForVfNetDevReady waits for a VF network device to be ready and available.
+// WaitForNetDevReady waits for a VF network device to be ready and available.
 // It retries getting the netdev name from the PCIe address. Returns the list of interface names once they are available, or an error if timeout is reached.
-func WaitForVfNetDevReady(platform platform.Platform, pcieAddr string) (string, error) {
+func WaitForNetDevReady(platform platform.Platform, pcieAddr string, timeout time.Duration) (string, error) {
 	var lastErr error
 	var ifName string
+	startTime := time.Now()
 
-	klog.V(2).Infof("WaitForVfNetDevReady(): waiting for VF netdev to appear for PCIe address %s (retries: %d, interval: %v)", pcieAddr, retryCount, retryInterval)
+	klog.V(2).Infof("WaitForNetDevReady(): waiting for VF netdev to appear for PCIe address %s (timeout: %.2fs, interval: %v)", pcieAddr, timeout.Seconds(), retryInterval)
 
-	for i := 0; i < retryCount; i++ {
+	for time.Since(startTime) < timeout {
 		ifName, lastErr = platform.GetNetDevNameFromPCIeAddr(pcieAddr)
 		if lastErr == nil {
-			klog.V(2).Infof("WaitForVfNetDevReady(): VF netdev ready for PCIe address %s: %v (attempt %d/%d)", pcieAddr, ifName, i+1, retryCount)
+			elapsedSeconds := time.Since(startTime).Seconds()
+			klog.Infof("WaitForNetDevReady(): VF netdev ready for PCIe address %s: %v (elapsed: %.2fs)", pcieAddr, ifName, elapsedSeconds)
 			return ifName, nil
 		}
 
-		if i < retryCount-1 {
-			klog.V(2).Infof("WaitForVfNetDevReady(): VF netdev not ready for PCIe address %s, retrying... (attempt %d/%d, last error: %v)", pcieAddr, i+1, retryCount, lastErr)
+		if time.Since(startTime)+retryInterval < timeout {
+			elapsedSeconds := time.Since(startTime).Seconds()
+			klog.V(2).Infof("WaitForNetDevReady(): VF netdev not ready for PCIe address %s, retrying... (elapsed: %.2fs, last error: %v)", pcieAddr, elapsedSeconds, lastErr)
 			time.Sleep(retryInterval)
+		} else {
+			break
 		}
 	}
 
-	return "", fmt.Errorf("timeout waiting for VF netdev to appear for PCIe address %s after %d retries: %w", pcieAddr, retryCount, lastErr)
+	elapsedSeconds := time.Since(startTime).Seconds()
+	return "", fmt.Errorf("timeout waiting for VF netdev to appear for PCIe address %s after %.2fs: %w", pcieAddr, elapsedSeconds, lastErr)
 }
 
 // WaitForVfPciAddressReady waits for a VF PCI address to be available after SR-IOV VF creation.
 // It retries getting the VF PCIe address from the VF index. Returns the PCIe address once it is available, or an error if timeout is reached.
-func WaitForVfPciAddressReady(fs afero.Fs, pfName string, vfId int) (string, error) {
+func WaitForVfPciAddressReady(fs afero.Fs, pfName string, vfId int, timeout time.Duration) (string, error) {
 	var lastErr error
 	var pciAddr string
+	startTime := time.Now()
 
-	klog.V(2).Infof("WaitForVfPciAddressReady(): waiting for VF PCI address for PF %s VF %d (retries: %d, interval: %v)", pfName, vfId, retryCount, retryInterval)
+	klog.V(2).Infof("WaitForVfPciAddressReady(): waiting for VF PCI address for PF %s VF %d (timeout: %.2fs, interval: %v)", pfName, vfId, timeout.Seconds(), retryInterval)
 
-	for i := 0; i < retryCount; i++ {
+	for time.Since(startTime) < timeout {
 		pciAddr, lastErr = VfPCIAddressFromVfIndex(fs, pfName, vfId)
 		if lastErr == nil && pciAddr != "" {
-			klog.V(2).Infof("WaitForVfPciAddressReady(): VF PCI address ready: %s (attempt %d/%d)", pciAddr, i+1, retryCount)
+			elapsedSeconds := time.Since(startTime).Seconds()
+			klog.Infof("WaitForVfPciAddressReady(): VF PCI address ready: %s (elapsed: %.2fs)", pciAddr, elapsedSeconds)
 			return pciAddr, nil
 		}
 
-		if i < retryCount-1 {
-			klog.V(2).Infof("WaitForVfPciAddressReady(): VF PCI address not ready for PF %s VF %d, retrying... (attempt %d/%d, last error: %v)", pfName, vfId, i+1, retryCount, lastErr)
+		if time.Since(startTime)+retryInterval < timeout {
+			elapsedSeconds := time.Since(startTime).Seconds()
+			klog.V(2).Infof("WaitForVfPciAddressReady(): VF PCI address not ready for PF %s VF %d, retrying... (elapsed: %.2fs, last error: %v)", pfName, vfId, elapsedSeconds, lastErr)
 			time.Sleep(retryInterval)
+		} else {
+			break
 		}
 	}
 
-	return "", fmt.Errorf("timeout waiting for VF PCI address for PF %s VF %d after %d retries: %w", pfName, vfId, retryCount, lastErr)
+	elapsedSeconds := time.Since(startTime).Seconds()
+	return "", fmt.Errorf("timeout waiting for VF PCI address for PF %s VF %d after %.2fs: %w", pfName, vfId, elapsedSeconds, lastErr)
+}
+
+// WaitForLinkReady waits for a netdev link to be ready.
+// It retries getting the netdev link by name. Returns the netdev link once it is available, or an error if timeout is reached.
+func WaitForLinkReady(ifName string, timeout time.Duration) (netlink.Link, error) {
+	var lastErr error
+	startTime := time.Now()
+
+	klog.V(2).Infof("WaitForLinkReady(): waiting for netdev link ready %s (timeout: %.2fs, interval: %v)", ifName, timeout.Seconds(), retryInterval)
+
+	for time.Since(startTime) < timeout {
+		vfLink, lastErr := netlink.LinkByName(ifName)
+		if lastErr == nil {
+			elapsedSeconds := time.Since(startTime).Seconds()
+			klog.Infof("WaitForLinkReady(): netdev link ready for %s (elapsed: %.2fs)", ifName, elapsedSeconds)
+			return vfLink, nil
+		}
+
+		if time.Since(startTime)+retryInterval < timeout {
+			elapsedSeconds := time.Since(startTime).Seconds()
+			klog.V(2).Infof("WaitForLinkReady(): netdev link not ready for %s, retrying... (elapsed: %.2fs, last error: %v)", ifName, elapsedSeconds, lastErr)
+			time.Sleep(retryInterval)
+		} else {
+			break
+		}
+	}
+
+	elapsedSeconds := time.Since(startTime).Seconds()
+	return nil, fmt.Errorf("timeout waiting for VF netdev link to be ready %s after %.2fs: %w", ifName, elapsedSeconds, lastErr)
 }
