@@ -130,8 +130,10 @@ func (d *DpuDetectorManager) DetectAll(imageManager images.ImageManager, client 
 		}
 
 		if dpuPlatform {
-			identifier := detector.DpuPlatformIdentifier()
-			vsp, err := detector.VspPlugin(true, imageManager, client, pm, identifier)
+			// Add the node name to the identifier to make it unique for multi DPU node deployments.
+			// TODO: Think about a better way to identify DPUs uniquely.
+			identifier := string(detector.DpuPlatformIdentifier()) + "-" + nodeName
+			vsp, err := detector.VspPlugin(true, imageManager, client, pm, plugin.DpuIdentifier(identifier))
 			if err != nil {
 				return nil, err
 			}
