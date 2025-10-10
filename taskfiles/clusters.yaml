@@ -8,7 +8,7 @@ tasks:
       - >
         cd cluster-deployment-automation;
         source /tmp/cda-venv/bin/activate;
-        ./cda.py --secret /root/pull_secret.json ../hack/cluster-configs/config-1-cluster.yaml deploy
+        ./cda.py --secret /root/pull_secret.json ../hack/cluster-configs/config-1-cluster-2-dpus.yaml deploy
 
   clean-1-cluster:
     deps:
@@ -17,7 +17,7 @@ tasks:
       - >
         cd cluster-deployment-automation;
         source /tmp/cda-venv/bin/activate;
-        ./cda.py --secret /root/pull_secret.json ../hack/cluster-configs/config-1-cluster.yaml deploy -f
+        ./cda.py --secret /root/pull_secret.json ../hack/cluster-configs/config-1-cluster-2-dpus.yaml deploy -f
 
   deploy-2-clusters:
     deps:
